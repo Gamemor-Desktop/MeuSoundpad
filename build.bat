@@ -7,10 +7,15 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-python -m PyInstaller --noconfirm --onefile --noconsole --name MeuSoundpad ^
-    --collect-all tkinterdnd2 soundpad.py
+echo Gerando o executavel (leva alguns minutos)...
+python -m PyInstaller --noconfirm --onefile --noconsole --name MeuSoundpad --collect-all tkinterdnd2 soundpad.py
 if errorlevel 1 (
     echo Falha ao gerar o executavel.
+    pause
+    exit /b 1
+)
+if not exist "dist\MeuSoundpad.exe" (
+    echo O PyInstaller terminou, mas o dist\MeuSoundpad.exe nao apareceu.
     pause
     exit /b 1
 )
