@@ -37,6 +37,7 @@ Na primeira vez que você abre o app, um tour guiado de 6 passos mostra como ins
 - **Parar um som só:** selecione-o e clique em **Parar** no painel do som.
 - **Ao repetir o atalho:** escolha se apertar de novo **reinicia** o som ou **alterna** entre tocar e parar.
 - **Buscar:** digite no campo de busca (ou aperte `Ctrl+F`) para filtrar a lista. O som que está tocando fica destacado em azul.
+- **Desativar som:** clique com o botão direito no som (ou use o botão no painel) e escolha **Desativar som**. Ele continua na pasta, mas não toca, nem pelo atalho. O atalho fica guardado e volta a valer quando você ativar o som de novo.
 - **Volume por som:** selecione um som e ajuste **Volume do som** (0 a 200%).
 - **Editar som:** em **✂ Editar som...** você corta o começo e o fim do arquivo e pode ativar o **loop**, que toca até você parar.
 - **Bandeja:** com **Ao fechar, ir para a bandeja** ligado, o X da janela só esconde o app. Os atalhos continuam valendo. Use o ícone perto do relógio para abrir ou sair.

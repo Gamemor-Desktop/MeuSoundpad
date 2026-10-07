@@ -330,6 +330,7 @@ class App:
         self.lista.heading("atalho", text="ATALHO", anchor="center")
         self.lista.column("som", width=320, anchor="w")
         self.lista.column("atalho", width=140, anchor="center", stretch=False)
+        self.lista.tag_configure("desativado", foreground="#6b7280")
         self.lista.tag_configure("tocando", foreground="#7cc4ff")
         barra = ctk.CTkScrollbar(quadro_lista, command=self.lista.yview)
         self.lista.configure(yscrollcommand=barra.set)
@@ -365,6 +366,7 @@ class App:
                           command=self.tocar_selecionado)
         b.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self._controles_som.append(b)
+        self.btn_tocar = b
         b = ctk.CTkButton(linha, text="■  Parar", height=38, font=fonte(14),
                           fg_color=BORDA, hover_color=BORDA_CLARA,
                           command=self.parar_selecionado)
@@ -400,6 +402,11 @@ class App:
                           fg_color=BORDA, hover_color=BORDA_CLARA, command=self.editar_som)
         b.pack(fill="x", padx=16, pady=(16, 0))
         self._controles_som.append(b)
+        self.btn_desativar = ctk.CTkButton(
+            painel, text="⊘  Desativar som", height=34, font=fonte(13), fg_color=BORDA,
+            hover_color=BORDA_CLARA, command=self.alternar_desativado)
+        self.btn_desativar.pack(fill="x", padx=16, pady=(8, 0))
+        self._controles_som.append(self.btn_desativar)
 
         self.alvos_tutorial = {"adicionar": btn_adicionar, "config": btn_config,
                                "painel": painel, "atalho": linha_atalho}
@@ -414,8 +421,12 @@ class App:
         self.lista.focus(nome)
         menu = tk.Menu(self.root, tearoff=0, bg=PAINEL, fg=TEXTO, activebackground=ACENTO,
                        activeforeground="white", bd=0, font=(FAMILIA, 10))
-        menu.add_command(label="▶  Tocar", command=lambda: self.tocar(nome))
+        desativado = self._desativado(nome)
+        menu.add_command(label="▶  Tocar", command=lambda: self.tocar(nome),
+                         state="disabled" if desativado else "normal")
         menu.add_command(label="■  Parar", command=lambda: self.parar_som(nome))
+        menu.add_command(label="Ativar som" if desativado else "⊘  Desativar som",
+                         command=lambda: self.alternar_desativado(nome))
         menu.add_separator()
         menu.add_command(label="Gravar atalho...", command=self.definir_atalho_som)
         tem_atalho = bool(self.config["atalhos"].get(nome))
@@ -465,6 +476,9 @@ class App:
         for chave in ("atalhos", "volumes", "cortes"):
             if nome in self.config[chave]:
                 self.config[chave][novo_nome] = self.config[chave].pop(nome)
+        desativados = self.config["desativados"]
+        if nome in desativados:
+            desativados[desativados.index(nome)] = novo_nome
         self._salvar_config()
         self._carregar_lista()
         if self.lista.exists(novo_nome):
@@ -485,6 +499,8 @@ class App:
             return
         for chave in ("atalhos", "volumes", "cortes"):
             self.config[chave].pop(nome, None)
+        if nome in self.config["desativados"]:
+            self.config["desativados"].remove(nome)
         self._salvar_config()
         self._carregar_lista()
         self.status(f"Excluído: {nome}")
@@ -635,19 +651,50 @@ class App:
         self.lista.delete(*self.lista.get_children())
         for nome in self.sons:
             if termo in nome.lower():
-                atalho = self.config["atalhos"].get(nome) or "—"
-                self.lista.insert("", "end", iid=nome, values=(nome, atalho))
+                self.lista.insert("", "end", iid=nome, values=self._valores(nome))
         self._marcar_tocando()
         if selecionado and self.lista.exists(selecionado[0]):
             self.lista.selection_set(selecionado[0])
         else:
             self._ao_selecionar()
 
+    def _desativado(self, nome):
+        return nome in self.config["desativados"]
+
+    def _valores(self, nome):
+        """Texto das colunas da lista para um som."""
+        rotulo = f"{nome}   (desativado)" if self._desativado(nome) else nome
+        return (rotulo, self.config["atalhos"].get(nome) or "—")
+
     def _marcar_tocando(self):
-        """Destaca na lista os sons que estão tocando agora."""
+        """Destaca na lista os sons que estão tocando agora e esmaece os desativados."""
         tocando = {t.nome for t in self.tocadores}
         for nome in self.lista.get_children():
-            self.lista.item(nome, tags=("tocando",) if nome in tocando else ())
+            tags = []
+            if nome in tocando:
+                tags.append("tocando")
+            if self._desativado(nome):
+                tags.append("desativado")
+            self.lista.item(nome, tags=tuple(tags))
+
+    def alternar_desativado(self, nome=None):
+        """Desativa ou reativa um som: ele continua na pasta, mas não toca."""
+        nome = nome or self._selecionado()
+        if not nome:
+            return
+        desativados = self.config["desativados"]
+        if nome in desativados:
+            desativados.remove(nome)
+            self.status(f"Som ativado: {nome}")
+            self._agendar_preload()
+        else:
+            self.parar_som(nome)
+            desativados.append(nome)
+            self.status(f"Som desativado: {nome}")
+        self._atualizar_linhas()
+        self._marcar_tocando()
+        self._registrar_atalhos()
+        self._salvar_config()
 
     def _agendar_preload(self):
         if self._preload_agendado:
@@ -664,7 +711,7 @@ class App:
         except Exception:
             log.exception("Falha ao consultar dispositivos para pré-carga")
             return
-        arquivos = [PASTA_SONS / nome for nome in self.sons]
+        arquivos = [PASTA_SONS / nome for nome in self.sons if not self._desativado(nome)]
 
         def trabalho():
             for caminho in arquivos:
@@ -706,6 +753,10 @@ class App:
             self.lbl_atalho_som.configure(text="")
         for controle in self._controles_som:
             controle.configure(state="normal" if nome else "disabled")
+        desativado = bool(nome) and self._desativado(nome)
+        self.btn_desativar.configure(text="Ativar som" if desativado else "⊘  Desativar som")
+        if desativado:
+            self.btn_tocar.configure(state="disabled")
 
     def _ao_mudar_volume_som(self):
         volume = round(self.var_vol_som.get())
@@ -857,6 +908,9 @@ class App:
         return specs
 
     def tocar(self, nome):
+        if self._desativado(nome):
+            self.status(f"\"{nome}\" está desativado.")
+            return
         if (self.var_repetir.get() == ALTERNAR
                 and any(t.nome == nome for t in self.tocadores)):
             self.parar_som(nome)
@@ -1000,7 +1054,7 @@ class App:
     def _registrar_atalhos(self):
         combos = []
         for nome, combo in self.config["atalhos"].items():
-            if combo and nome in self.sons:
+            if combo and nome in self.sons and not self._desativado(nome):
                 teclas = self._interpretar(combo)
                 if teclas:
                     combos.append((teclas, lambda n=nome: self.na_interface(self.tocar, n)))
@@ -1076,8 +1130,7 @@ class App:
 
     def _atualizar_linhas(self):
         for nome in self.lista.get_children():
-            atalho = self.config["atalhos"].get(nome) or "—"
-            self.lista.item(nome, values=(nome, atalho))
+            self.lista.item(nome, values=self._valores(nome))
         self._atualizar_painel()
 
     def definir_atalho_som(self):
@@ -1227,6 +1280,7 @@ class App:
         config.setdefault("atalho_parar", "")
         config.setdefault("volumes", {})
         config.setdefault("cortes", {})
+        config.setdefault("desativados", [])
         return config
 
     def _agendar_salvar(self):
