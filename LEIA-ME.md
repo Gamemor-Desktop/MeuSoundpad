@@ -24,17 +24,18 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 
 ## Uso
 
-- **Adicionar sons:** use o botão **+ Adicionar sons** ou jogue arquivos `.mp3`, `.wav`, `.ogg` ou `.flac` na pasta `sons` e clique em **Atualizar lista**.
+- **Adicionar sons:** use o botão **+ Adicionar sons**, arraste arquivos para a lista, ou jogue `.mp3`, `.wav`, `.ogg` ou `.flac` na pasta `sons` e clique em **Atualizar lista** (em **Configurações**).
 - **Tocar:** dê dois cliques no som ou selecione e aperte Enter.
-- **Atalho:** selecione um som, clique em **Definir atalho** e aperte a combinação (ex.: `ctrl+1`). Use Esc para cancelar.
-- **Parar tudo:** defina um atalho na parte de baixo da janela.
+- **Atalho:** selecione um som, clique em **Definir** (no painel à direita) e aperte a combinação (ex.: `ctrl+1`). Use Esc para cancelar.
+- **Parar tudo:** botão vermelho na barra de baixo, onde também fica o atalho para parar.
+- **Configurações:** o botão no topo abre a janela com as saídas de áudio (microfone virtual e fones, cada um com volume), sons sobrepostos, comportamento ao repetir o atalho, bandeja e iniciar com o Windows.
 - **Sons sobrepostos:** por padrão só um som toca por vez. Marque **Permitir sons sobrepostos** para tocar vários ao mesmo tempo.
-- **Parar um som só:** selecione-o e clique em **Parar selecionado**.
+- **Parar um som só:** selecione-o e clique em **Parar** no painel do som.
 - **Ao repetir o atalho:** escolha se apertar de novo **reinicia** o som ou **alterna** entre tocar e parar.
-- **Buscar:** digite no campo **Buscar** para filtrar a lista. Você também pode arrastar arquivos de áudio para a lista.
-- **Volume por som:** selecione um som e ajuste **Volume do som selecionado** (0 a 200%).
-- **Editar som:** em **Editar som...** você corta o começo e o fim do arquivo e pode ativar o **loop**, que toca até você parar.
-- **Bandeja:** com **Ao fechar, ir para a bandeja** marcado, o X da janela só esconde o app. Os atalhos continuam valendo. Use o ícone perto do relógio para abrir ou sair.
+- **Buscar:** digite no campo de busca (ou aperte `Ctrl+F`) para filtrar a lista. O som que está tocando fica destacado em azul.
+- **Volume por som:** selecione um som e ajuste **Volume do som** (0 a 200%).
+- **Editar som:** em **✂ Editar som...** você corta o começo e o fim do arquivo e pode ativar o **loop**, que toca até você parar.
+- **Bandeja:** com **Ao fechar, ir para a bandeja** ligado, o X da janela só esconde o app. Os atalhos continuam valendo. Use o ícone perto do relógio para abrir ou sair.
 - **Iniciar com o Windows:** o app abre escondido na bandeja quando você liga o PC.
 - **Microfone virtual** deve estar em **CABLE Input**. **Ouvir nos fones** toca o som também para você.
 - As configurações ficam salvas em `config.json`.
@@ -56,7 +57,7 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 - **Os atalhos não funcionam dentro do jogo:** se o jogo roda como administrador, o app também precisa rodar. Clique com o botão direito em `abrir.bat` e escolha **Executar como administrador**.
 - **Ninguém ouve os sons:** confira se o app está tocando em **CABLE Input** e se o Discord ou o jogo está usando **CABLE Output** como microfone.
 - **"VB-Cable não encontrado":** instale o VB-Cable e reinicie o PC.
-- **O som sai baixo ou estourado:** ajuste os controles de volume ao lado de cada saída.
+- **O som sai baixo ou estourado:** ajuste o volume de cada saída em **Configurações**.
 
 ## Licença
 

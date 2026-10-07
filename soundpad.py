@@ -24,6 +24,7 @@ import keyboard
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
+import customtkinter as ctk
 
 from audio import carregar_audio, cortar, limitar
 
@@ -63,7 +64,24 @@ ALTERNAR = "Alternar tocar/parar"
 CHAVE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
 NOME_RUN = "MeuSoundpad"
 
+# Tema escuro
+FUNDO = "#16171a"
+PAINEL = "#202226"
+BORDA = "#2f3238"
+BORDA_CLARA = "#3d4148"
+TEXTO_SUAVE = "#9aa0a6"
+TEXTO = "#e8eaed"
+ACENTO = "#3b82f6"
+ACENTO_ESCURO = "#2456a8"
+PERIGO = "#dc2626"
+PERIGO_ESCURO = "#b91c1c"
+FAMILIA = "Segoe UI"
+
 log = logging.getLogger("soundpad")
+
+
+def fonte(tamanho, peso="normal"):
+    return ctk.CTkFont(family=FAMILIA, size=tamanho, weight=peso)
 
 
 def configurar_log():
@@ -206,8 +224,8 @@ class App:
         self.config = self._ler_config()
 
         root.title("Meu Soundpad")
-        root.geometry("640x700")
-        root.minsize(560, 560)
+        root.geometry("920x600")
+        root.minsize(800, 480)
 
         self.dispositivos = self._listar_dispositivos()
         self._montar_interface()
@@ -223,159 +241,251 @@ class App:
 
     # ----- interface ------------------------------------------------------
 
-    def _montar_interface(self):
-        nomes = [nome for _, nome in self.dispositivos]
-
-        # Barra de status (primeiro, para nunca ser empurrada para fora)
-        self.lbl_status = ttk.Label(self.root, text="Pronto", relief="sunken",
-                                    anchor="w", padding=(6, 2))
-        self.lbl_status.pack(fill="x", side="bottom")
-
-        # Saídas de áudio
-        quadro = ttk.LabelFrame(self.root, text="Saídas de áudio", padding=8)
-        quadro.pack(fill="x", padx=10, pady=(10, 5))
-        quadro.columnconfigure(1, weight=1)
-
-        ttk.Label(quadro, text="Microfone virtual:").grid(row=0, column=0, sticky="w")
-        self.var_mic = tk.StringVar(
-            value=self._escolher_inicial(self.config.get("saida_mic"), "cable input"))
-        ttk.Combobox(quadro, textvariable=self.var_mic, values=nomes,
-                     state="readonly").grid(row=0, column=1, sticky="ew", padx=6)
-        self.var_vol_mic = tk.DoubleVar(value=self.config.get("volume_mic", 80))
-        ttk.Label(quadro, text="Vol.").grid(row=0, column=2)
-        ttk.Scale(quadro, from_=0, to=150, variable=self.var_vol_mic,
-                  length=110).grid(row=0, column=3)
-
-        self.var_ouvir = tk.BooleanVar(value=self.config.get("ouvir", True))
-        ttk.Checkbutton(quadro, text="Ouvir nos fones:",
-                        variable=self.var_ouvir).grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.var_fone = tk.StringVar(
-            value=self._escolher_inicial(self.config.get("saida_fone"), None))
-        ttk.Combobox(quadro, textvariable=self.var_fone, values=nomes,
-                     state="readonly").grid(row=1, column=1, sticky="ew", padx=6, pady=(6, 0))
-        self.var_vol_fone = tk.DoubleVar(value=self.config.get("volume_fone", 60))
-        ttk.Label(quadro, text="Vol.").grid(row=1, column=2, pady=(6, 0))
-        ttk.Scale(quadro, from_=0, to=150, variable=self.var_vol_fone,
-                  length=110).grid(row=1, column=3, pady=(6, 0))
-
-        self.var_sobrepor = tk.BooleanVar(value=self.config.get("sobrepor", False))
-        ttk.Checkbutton(quadro, text="Permitir sons sobrepostos",
-                        variable=self.var_sobrepor).grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
-
-        self.var_repetir = tk.StringVar(
-            value=self.config.get("ao_repetir", REINICIAR))
-        ttk.Label(quadro, text="Ao repetir o atalho:").grid(
-            row=3, column=0, sticky="w", pady=(6, 0))
-        ttk.Combobox(quadro, textvariable=self.var_repetir, values=[REINICIAR, ALTERNAR],
-                     state="readonly").grid(row=3, column=1, sticky="ew", padx=6, pady=(6, 0))
+    def _criar_variaveis(self):
+        c = self.config
+        self.var_mic = tk.StringVar(value=self._escolher_inicial(c.get("saida_mic"), "cable input"))
+        self.var_fone = tk.StringVar(value=self._escolher_inicial(c.get("saida_fone"), None))
+        self.var_vol_mic = tk.DoubleVar(value=c.get("volume_mic", 80))
+        self.var_vol_fone = tk.DoubleVar(value=c.get("volume_fone", 60))
+        self.var_ouvir = tk.BooleanVar(value=c.get("ouvir", True))
+        self.var_sobrepor = tk.BooleanVar(value=c.get("sobrepor", False))
+        self.var_repetir = tk.StringVar(value=c.get("ao_repetir", REINICIAR))
+        self.var_bandeja = tk.BooleanVar(value=c.get("bandeja", False) and pystray is not None)
+        self.var_autostart = tk.BooleanVar(value=autostart_ativo())
+        self.var_busca = tk.StringVar()
+        self.var_vol_som = tk.DoubleVar(value=100)
 
         # Salva a configuração sempre que algo mudar (com um pequeno atraso)
         for var in (self.var_mic, self.var_fone, self.var_vol_mic, self.var_vol_fone,
-                    self.var_ouvir, self.var_sobrepor, self.var_repetir):
+                    self.var_ouvir, self.var_sobrepor, self.var_repetir, self.var_bandeja):
             var.trace_add("write", lambda *args: self._agendar_salvar())
         # Trocar de dispositivo muda a taxa/canais: recarrega os sons em segundo plano
         for var in (self.var_mic, self.var_fone, self.var_ouvir):
             var.trace_add("write", lambda *args: self._agendar_preload())
-
-        # Busca
-        quadro_busca = ttk.Frame(self.root)
-        quadro_busca.pack(fill="x", padx=10, pady=(5, 0))
-        ttk.Label(quadro_busca, text="Buscar:").pack(side="left")
-        self.var_busca = tk.StringVar()
-        ttk.Entry(quadro_busca, textvariable=self.var_busca).pack(
-            side="left", fill="x", expand=True, padx=6)
         self.var_busca.trace_add("write", lambda *args: self._filtrar())
+        self.var_vol_som.trace_add("write", lambda *args: self._ao_mudar_volume_som())
+
+    def _montar_interface(self):
+        self._criar_variaveis()
+        self._janela_config = None
+        self.root.configure(fg_color=FUNDO)
+
+        # Barra de baixo (criada primeiro para nunca ser empurrada para fora)
+        rodape = ctk.CTkFrame(self.root, fg_color=PAINEL, corner_radius=0, height=48)
+        rodape.pack(fill="x", side="bottom")
+        self.lbl_status = ctk.CTkLabel(rodape, text="Pronto", anchor="w",
+                                       text_color=TEXTO_SUAVE, font=fonte(12))
+        self.lbl_status.pack(side="left", padx=16, pady=10)
+        ctk.CTkButton(rodape, text="■  Parar tudo", width=120, fg_color=PERIGO,
+                      hover_color=PERIGO_ESCURO, font=fonte(13, "bold"),
+                      command=self.parar).pack(side="right", padx=(8, 16), pady=8)
+        ctk.CTkButton(rodape, text="Limpar", width=60, fg_color=BORDA, hover_color=BORDA_CLARA,
+                      command=self.limpar_atalho_parar).pack(side="right", pady=8)
+        ctk.CTkButton(rodape, text="Definir", width=64, fg_color=BORDA, hover_color=BORDA_CLARA,
+                      command=self.definir_atalho_parar).pack(side="right", padx=6, pady=8)
+        self.lbl_parar = ctk.CTkLabel(rodape, text=self.config.get("atalho_parar") or "—",
+                                      font=fonte(12, "bold"))
+        self.lbl_parar.pack(side="right", padx=4)
+        ctk.CTkLabel(rodape, text="Atalho para parar:", text_color=TEXTO_SUAVE,
+                     font=fonte(12)).pack(side="right", padx=(0, 4))
+
+        # Topo: busca e ações
+        topo = ctk.CTkFrame(self.root, fg_color="transparent")
+        topo.pack(fill="x", padx=16, pady=(16, 8))
+        self.entrada_busca = ctk.CTkEntry(
+            topo, height=38, font=fonte(13),
+            placeholder_text="Buscar sons...  (Ctrl+F)", fg_color=PAINEL, border_color=BORDA)
+        self.entrada_busca.pack(side="left", fill="x", expand=True)
+        self.entrada_busca.bind(
+            "<KeyRelease>", lambda e: self.var_busca.set(self.entrada_busca.get()))
+        ctk.CTkButton(topo, text="⚙  Configurações", width=140, height=38, font=fonte(13),
+                      fg_color=PAINEL, hover_color=BORDA, border_width=1, border_color=BORDA,
+                      command=self.abrir_configuracoes).pack(side="right", padx=(8, 0))
+        ctk.CTkButton(topo, text="+  Adicionar sons", width=150, height=38,
+                      font=fonte(13, "bold"), fg_color=ACENTO, hover_color=ACENTO_ESCURO,
+                      command=self.adicionar_sons).pack(side="right", padx=(8, 0))
+
+        corpo = ctk.CTkFrame(self.root, fg_color="transparent")
+        corpo.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+        corpo.columnconfigure(0, weight=1)
+        corpo.rowconfigure(0, weight=1)
 
         # Lista de sons
-        quadro_lista = ttk.Frame(self.root)
-        quadro_lista.pack(fill="both", expand=True, padx=10, pady=5)
-        self.lista = ttk.Treeview(quadro_lista, columns=("som", "atalho"),
-                                  show="headings", selectmode="browse")
-        self.lista.heading("som", text="Som")
-        self.lista.heading("atalho", text="Atalho")
-        self.lista.column("som", width=340)
-        self.lista.column("atalho", width=150, anchor="center")
-        barra = ttk.Scrollbar(quadro_lista, orient="vertical", command=self.lista.yview)
+        quadro_lista = ctk.CTkFrame(corpo, fg_color=PAINEL, corner_radius=10)
+        quadro_lista.grid(row=0, column=0, sticky="nsew")
+        estilo = ttk.Style()
+        estilo.theme_use("clam")
+        estilo.configure("Sons.Treeview", background=PAINEL, fieldbackground=PAINEL,
+                         foreground=TEXTO, rowheight=36, borderwidth=0, relief="flat",
+                         bordercolor=PAINEL, lightcolor=PAINEL, darkcolor=PAINEL,
+                         font=(FAMILIA, 11))
+        estilo.configure("Sons.Treeview.Heading", background=PAINEL, foreground=TEXTO_SUAVE,
+                         relief="flat", borderwidth=0, font=(FAMILIA, 10, "bold"),
+                         padding=(8, 8))
+        estilo.map("Sons.Treeview", background=[("selected", ACENTO_ESCURO)],
+                   foreground=[("selected", "white")])
+        estilo.map("Sons.Treeview.Heading", background=[("active", PAINEL)])
+        self.lista = ttk.Treeview(quadro_lista, columns=("som", "atalho"), show="headings",
+                                  selectmode="browse", style="Sons.Treeview")
+        self.lista.heading("som", text="SOM", anchor="w")
+        self.lista.heading("atalho", text="ATALHO", anchor="center")
+        self.lista.column("som", width=320, anchor="w")
+        self.lista.column("atalho", width=140, anchor="center", stretch=False)
+        self.lista.tag_configure("tocando", foreground="#7cc4ff")
+        barra = ctk.CTkScrollbar(quadro_lista, command=self.lista.yview)
         self.lista.configure(yscrollcommand=barra.set)
-        self.lista.pack(side="left", fill="both", expand=True)
-        barra.pack(side="right", fill="y")
+        self.lista.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
+        barra.pack(side="right", fill="y", padx=4, pady=8)
         self.lista.bind("<Double-1>", lambda e: self.tocar_selecionado())
         self.lista.bind("<Return>", lambda e: self.tocar_selecionado())
         self.lista.bind("<<TreeviewSelect>>", lambda e: self._ao_selecionar())
+        self.root.bind("<Control-f>", lambda e: self.entrada_busca.focus_set())
         if TkinterDnD is not None:
             self.lista.drop_target_register(DND_FILES)
             self.lista.dnd_bind("<<Drop>>", self._ao_soltar)
 
-        # Volume do som selecionado
-        quadro_vol = ttk.Frame(self.root)
-        quadro_vol.pack(fill="x", padx=10)
-        ttk.Label(quadro_vol, text="Volume do som selecionado:").pack(side="left")
-        self.var_vol_som = tk.DoubleVar(value=100)
-        self.escala_som = ttk.Scale(quadro_vol, from_=0, to=200, variable=self.var_vol_som)
-        self.escala_som.pack(side="left", fill="x", expand=True, padx=6)
-        self.lbl_vol_som = ttk.Label(quadro_vol, text="100%", width=5)
-        self.lbl_vol_som.pack(side="left")
-        self.var_vol_som.trace_add("write", lambda *args: self._ao_mudar_volume_som())
+        # Painel do som selecionado
+        painel = ctk.CTkFrame(corpo, fg_color=PAINEL, corner_radius=10, width=270)
+        painel.grid(row=0, column=1, sticky="ns", padx=(12, 0))
+        painel.pack_propagate(False)
+        self.lbl_nome_som = ctk.CTkLabel(painel, text="Selecione um som", font=fonte(15, "bold"),
+                                         wraplength=230, justify="left", anchor="w")
+        self.lbl_nome_som.pack(fill="x", padx=16, pady=(16, 2))
+        self.lbl_atalho_som = ctk.CTkLabel(painel, text="", text_color=TEXTO_SUAVE,
+                                           font=fonte(12), anchor="w")
+        self.lbl_atalho_som.pack(fill="x", padx=16)
 
-        # Botões
-        botoes = ttk.Frame(self.root)
-        botoes.pack(fill="x", padx=10, pady=5)
-        linha1 = [
-            ("▶ Tocar", self.tocar_selecionado),
-            ("■ Parar tudo", self.parar),
-            ("Parar selecionado", self.parar_selecionado),
-            ("Definir atalho", self.definir_atalho_som),
-            ("Limpar atalho", self.limpar_atalho_som),
-        ]
-        linha2 = [
-            ("+ Adicionar sons", self.adicionar_sons),
-            ("Abrir pasta de sons", self.abrir_pasta),
-            ("Atualizar lista", self._carregar_lista),
-            ("Editar som...", self.editar_som),
-        ]
-        for coluna, (texto, comando) in enumerate(linha1):
-            ttk.Button(botoes, text=texto, command=comando).grid(
-                row=0, column=coluna, sticky="ew", padx=2, pady=2)
-        for coluna, (texto, comando) in enumerate(linha2):
-            ttk.Button(botoes, text=texto, command=comando).grid(
-                row=1, column=coluna, sticky="ew", padx=2, pady=2)
-        for coluna in range(5):
-            botoes.columnconfigure(coluna, weight=1)
+        self._controles_som = []
 
-        # Atalho para parar
-        quadro_parar = ttk.Frame(self.root)
-        quadro_parar.pack(fill="x", padx=10, pady=(0, 5))
-        ttk.Label(quadro_parar, text="Atalho para parar tudo:").pack(side="left")
-        self.lbl_parar = ttk.Label(quadro_parar, text=self.config.get("atalho_parar") or "—",
-                                   font=("Segoe UI", 9, "bold"))
-        self.lbl_parar.pack(side="left", padx=6)
-        ttk.Button(quadro_parar, text="Definir",
-                   command=self.definir_atalho_parar).pack(side="left")
-        ttk.Button(quadro_parar, text="Limpar",
-                   command=self.limpar_atalho_parar).pack(side="left", padx=4)
+        linha = ctk.CTkFrame(painel, fg_color="transparent")
+        linha.pack(fill="x", padx=16, pady=(14, 6))
+        linha.columnconfigure((0, 1), weight=1)
+        b = ctk.CTkButton(linha, text="▶  Tocar", height=38, font=fonte(14, "bold"),
+                          fg_color=ACENTO, hover_color=ACENTO_ESCURO,
+                          command=self.tocar_selecionado)
+        b.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self._controles_som.append(b)
+        b = ctk.CTkButton(linha, text="■  Parar", height=38, font=fonte(14),
+                          fg_color=BORDA, hover_color=BORDA_CLARA,
+                          command=self.parar_selecionado)
+        b.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self._controles_som.append(b)
 
-        # Opções do programa
-        quadro_op = ttk.Frame(self.root)
-        quadro_op.pack(fill="x", padx=10, pady=(0, 5))
-        self.var_bandeja = tk.BooleanVar(
-            value=self.config.get("bandeja", False) and pystray is not None)
-        check_bandeja = ttk.Checkbutton(
-            quadro_op, text="Ao fechar, ir para a bandeja", variable=self.var_bandeja)
-        check_bandeja.pack(side="left")
-        self.var_bandeja.trace_add("write", lambda *args: self._agendar_salvar())
+        ctk.CTkLabel(painel, text="ATALHO", text_color=TEXTO_SUAVE, font=fonte(10, "bold"),
+                     anchor="w").pack(fill="x", padx=16, pady=(12, 2))
+        linha = ctk.CTkFrame(painel, fg_color="transparent")
+        linha.pack(fill="x", padx=16)
+        linha.columnconfigure((0, 1), weight=1)
+        b = ctk.CTkButton(linha, text="Definir", height=32, font=fonte(12), fg_color=BORDA,
+                          hover_color=BORDA_CLARA, command=self.definir_atalho_som)
+        b.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self._controles_som.append(b)
+        b = ctk.CTkButton(linha, text="Limpar", height=32, font=fonte(12), fg_color=BORDA,
+                          hover_color=BORDA_CLARA, command=self.limpar_atalho_som)
+        b.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self._controles_som.append(b)
+
+        cab = ctk.CTkFrame(painel, fg_color="transparent")
+        cab.pack(fill="x", padx=16, pady=(14, 0))
+        ctk.CTkLabel(cab, text="VOLUME DO SOM", text_color=TEXTO_SUAVE,
+                     font=fonte(10, "bold")).pack(side="left")
+        self.lbl_vol_som = ctk.CTkLabel(cab, text="100%", font=fonte(12, "bold"))
+        self.lbl_vol_som.pack(side="right")
+        self.escala_som = ctk.CTkSlider(painel, from_=0, to=200, variable=self.var_vol_som)
+        self.escala_som.pack(fill="x", padx=16, pady=(4, 0))
+        self._controles_som.append(self.escala_som)
+
+        b = ctk.CTkButton(painel, text="✂  Editar som...", height=34, font=fonte(13),
+                          fg_color=BORDA, hover_color=BORDA_CLARA, command=self.editar_som)
+        b.pack(fill="x", padx=16, pady=(16, 0))
+        self._controles_som.append(b)
+
+        self._ao_selecionar()
+
+    def abrir_configuracoes(self):
+        if self._janela_config is not None and self._janela_config.winfo_exists():
+            self._janela_config.lift()
+            self._janela_config.focus()
+            return
+        nomes = [nome for _, nome in self.dispositivos] or [""]
+        janela = ctk.CTkToplevel(self.root, fg_color=FUNDO)
+        self._janela_config = janela
+        janela.title("Configurações")
+        janela.geometry("560x660")
+        janela.minsize(520, 560)
+        janela.transient(self.root)
+        janela.after(200, janela.focus)
+
+        corpo = ctk.CTkScrollableFrame(janela, fg_color="transparent")
+        corpo.pack(fill="both", expand=True, padx=8, pady=8)
+
+        def secao(titulo):
+            quadro = ctk.CTkFrame(corpo, fg_color=PAINEL, corner_radius=10)
+            quadro.pack(fill="x", padx=8, pady=6)
+            ctk.CTkLabel(quadro, text=titulo, font=fonte(13, "bold"),
+                         anchor="w").pack(fill="x", padx=16, pady=(12, 4))
+            return quadro
+
+        def menu(quadro, valores, var):
+            ctk.CTkOptionMenu(quadro, values=valores, variable=var, dynamic_resizing=False,
+                              fg_color=BORDA, button_color=BORDA,
+                              button_hover_color=BORDA_CLARA,
+                              height=32).pack(fill="x", padx=16, pady=(2, 0))
+
+        def saida(quadro, rotulo, var_nome, var_vol):
+            ctk.CTkLabel(quadro, text=rotulo, text_color=TEXTO_SUAVE, font=fonte(12),
+                         anchor="w").pack(fill="x", padx=16, pady=(6, 0))
+            menu(quadro, nomes, var_nome)
+            linha = ctk.CTkFrame(quadro, fg_color="transparent")
+            linha.pack(fill="x", padx=16, pady=(6, 0))
+            ctk.CTkLabel(linha, text="Volume", font=fonte(12)).pack(side="left")
+            rotulo_vol = ctk.CTkLabel(linha, text=f"{round(var_vol.get())}%", width=48,
+                                      font=fonte(12, "bold"))
+            rotulo_vol.pack(side="right")
+            ctk.CTkSlider(linha, from_=0, to=150, variable=var_vol,
+                          command=lambda v: rotulo_vol.configure(text=f"{round(v)}%")
+                          ).pack(side="left", fill="x", expand=True, padx=10)
+
+        quadro = secao("Saídas de áudio")
+        saida(quadro, "Microfone virtual (CABLE Input)", self.var_mic, self.var_vol_mic)
+        ctk.CTkSwitch(quadro, text="Ouvir também nos fones", variable=self.var_ouvir,
+                      font=fonte(13)).pack(anchor="w", padx=16, pady=(14, 0))
+        saida(quadro, "Fones", self.var_fone, self.var_vol_fone)
+        ctk.CTkFrame(quadro, fg_color="transparent", height=12).pack()
+
+        quadro = secao("Reprodução")
+        ctk.CTkSwitch(quadro, text="Permitir sons sobrepostos", variable=self.var_sobrepor,
+                      font=fonte(13)).pack(anchor="w", padx=16, pady=(4, 0))
+        ctk.CTkLabel(quadro, text="Ao repetir o atalho", text_color=TEXTO_SUAVE,
+                     font=fonte(12), anchor="w").pack(fill="x", padx=16, pady=(10, 0))
+        menu(quadro, [REINICIAR, ALTERNAR], self.var_repetir)
+        ctk.CTkFrame(quadro, fg_color="transparent", height=14).pack()
+
+        quadro = secao("Programa")
+        sw = ctk.CTkSwitch(quadro, text="Ao fechar, ir para a bandeja",
+                           variable=self.var_bandeja, font=fonte(13))
+        sw.pack(anchor="w", padx=16, pady=(4, 0))
         if pystray is None:
-            check_bandeja.state(["disabled"])
-        self.var_autostart = tk.BooleanVar(value=autostart_ativo())
-        check_auto = ttk.Checkbutton(
-            quadro_op, text="Iniciar com o Windows", variable=self.var_autostart,
-            command=self._alternar_autostart)
-        check_auto.pack(side="left", padx=12)
+            sw.configure(state="disabled")
+        sw = ctk.CTkSwitch(quadro, text="Iniciar com o Windows", variable=self.var_autostart,
+                           command=self._alternar_autostart, font=fonte(13))
+        sw.pack(anchor="w", padx=16, pady=(10, 14))
         if winreg is None:
-            check_auto.state(["disabled"])
+            sw.configure(state="disabled")
+
+        quadro = secao("Sons")
+        linha = ctk.CTkFrame(quadro, fg_color="transparent")
+        linha.pack(fill="x", padx=16, pady=(4, 14))
+        linha.columnconfigure((0, 1), weight=1)
+        ctk.CTkButton(linha, text="Abrir pasta de sons", fg_color=BORDA,
+                      hover_color=BORDA_CLARA, command=self.abrir_pasta
+                      ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(linha, text="Atualizar lista", fg_color=BORDA,
+                      hover_color=BORDA_CLARA, command=self._carregar_lista
+                      ).grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
     def status(self, texto):
-        self.lbl_status.config(text=texto)
+        self.lbl_status.configure(text=texto)
 
     # ----- dispositivos ---------------------------------------------------
 
@@ -440,10 +550,17 @@ class App:
             if termo in nome.lower():
                 atalho = self.config["atalhos"].get(nome) or "—"
                 self.lista.insert("", "end", iid=nome, values=(nome, atalho))
+        self._marcar_tocando()
         if selecionado and self.lista.exists(selecionado[0]):
             self.lista.selection_set(selecionado[0])
         else:
             self._ao_selecionar()
+
+    def _marcar_tocando(self):
+        """Destaca na lista os sons que estão tocando agora."""
+        tocando = {t.nome for t in self.tocadores}
+        for nome in self.lista.get_children():
+            self.lista.item(nome, tags=("tocando",) if nome in tocando else ())
 
     def _agendar_preload(self):
         if self._preload_agendado:
@@ -483,16 +600,29 @@ class App:
 
     def _ao_selecionar(self):
         selecao = self.lista.selection()
-        volume = self.config["volumes"].get(selecao[0], 100) if selecao else 100
+        nome = selecao[0] if selecao else None
+        volume = self.config["volumes"].get(nome, 100) if nome else 100
         self._atualizando = True
         self.var_vol_som.set(volume)
-        self.lbl_vol_som.config(text=f"{round(volume)}%")
         self._atualizando = False
-        self.escala_som.state(["!disabled"] if selecao else ["disabled"])
+        self.lbl_vol_som.configure(text=f"{round(volume)}%")
+        self._atualizar_painel()
+
+    def _atualizar_painel(self):
+        selecao = self.lista.selection()
+        nome = selecao[0] if selecao else None
+        self.lbl_nome_som.configure(text=nome or "Selecione um som")
+        if nome:
+            atalho = self.config["atalhos"].get(nome)
+            self.lbl_atalho_som.configure(text=f"Atalho: {atalho}" if atalho else "Sem atalho")
+        else:
+            self.lbl_atalho_som.configure(text="")
+        for controle in self._controles_som:
+            controle.configure(state="normal" if nome else "disabled")
 
     def _ao_mudar_volume_som(self):
         volume = round(self.var_vol_som.get())
-        self.lbl_vol_som.config(text=f"{volume}%")
+        self.lbl_vol_som.configure(text=f"{volume}%")
         if self._atualizando:
             return
         selecao = self.lista.selection()
@@ -545,34 +675,42 @@ class App:
         except Exception:
             duracao = 0.0
 
-        janela = tk.Toplevel(self.root)
-        janela.title(f"Editar: {nome}")
+        janela = ctk.CTkToplevel(self.root, fg_color=FUNDO)
+        janela.title("Editar som")
         janela.transient(self.root)
         janela.resizable(False, False)
-        quadro = ttk.Frame(janela, padding=12)
-        quadro.pack()
+        quadro = ctk.CTkFrame(janela, fg_color=PAINEL, corner_radius=10)
+        quadro.pack(padx=16, pady=16)
 
-        ttk.Label(quadro, text=f"Duração do arquivo: {duracao:.2f} s").grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
-        var_inicio = tk.DoubleVar(value=atual.get("inicio", 0.0))
-        var_fim = tk.DoubleVar(value=atual.get("fim", 0.0))
+        ctk.CTkLabel(quadro, text=nome, font=fonte(14, "bold"), wraplength=360,
+                     justify="left", anchor="w").pack(fill="x", padx=16, pady=(14, 0))
+        ctk.CTkLabel(quadro, text=f"Duração do arquivo: {duracao:.2f} s",
+                     text_color=TEXTO_SUAVE, font=fonte(12), anchor="w"
+                     ).pack(fill="x", padx=16, pady=(0, 8))
+
+        var_inicio = tk.StringVar(value=f"{atual.get('inicio', 0.0):g}")
+        var_fim = tk.StringVar(value=f"{atual.get('fim', 0.0):g}")
         var_loop = tk.BooleanVar(value=atual.get("loop", False))
-        limite = max(duracao, 0.1)
-        ttk.Label(quadro, text="Começar em (s):").grid(row=1, column=0, sticky="w")
-        ttk.Spinbox(quadro, from_=0, to=limite, increment=0.1, width=8,
-                    textvariable=var_inicio).grid(row=1, column=1, padx=6, pady=2)
-        ttk.Label(quadro, text="Terminar em (s, 0 = até o fim):").grid(
-            row=2, column=0, sticky="w")
-        ttk.Spinbox(quadro, from_=0, to=limite, increment=0.1, width=8,
-                    textvariable=var_fim).grid(row=2, column=1, padx=6, pady=2)
-        ttk.Checkbutton(quadro, text="Repetir em loop (até parar)",
-                        variable=var_loop).grid(row=3, column=0, columnspan=2,
-                                                sticky="w", pady=(6, 0))
+
+        def campo(rotulo, var):
+            linha = ctk.CTkFrame(quadro, fg_color="transparent")
+            linha.pack(fill="x", padx=16, pady=3)
+            ctk.CTkLabel(linha, text=rotulo, font=fonte(13)).pack(side="left")
+            ctk.CTkEntry(linha, textvariable=var, width=80, justify="center"
+                         ).pack(side="right")
+
+        campo("Começar em (segundos)", var_inicio)
+        campo("Terminar em (0 = até o fim)", var_fim)
+        ctk.CTkSwitch(quadro, text="Repetir em loop até parar", variable=var_loop,
+                      font=fonte(13)).pack(anchor="w", padx=16, pady=(10, 0))
+
+        def numero(var):
+            return round(float(var.get().strip().replace(",", ".") or 0), 2)
 
         def salvar():
             try:
-                inicio, fim = round(var_inicio.get(), 2), round(var_fim.get(), 2)
-            except tk.TclError:
+                inicio, fim = numero(var_inicio), numero(var_fim)
+            except ValueError:
                 messagebox.showwarning("Editar som", "Digite números válidos.", parent=janela)
                 return
             if inicio < 0 or fim < 0 or (fim and fim <= inicio):
@@ -594,12 +732,16 @@ class App:
             self.status(f"Edição removida de {nome}.")
             janela.destroy()
 
-        rodape = ttk.Frame(quadro)
-        rodape.grid(row=4, column=0, columnspan=2, pady=(12, 0), sticky="e")
-        ttk.Button(rodape, text="Remover edição", command=remover).pack(side="left", padx=4)
-        ttk.Button(rodape, text="Cancelar", command=janela.destroy).pack(side="left", padx=4)
-        ttk.Button(rodape, text="Salvar", command=salvar).pack(side="left", padx=4)
-        janela.grab_set()
+        rodape = ctk.CTkFrame(quadro, fg_color="transparent")
+        rodape.pack(fill="x", padx=16, pady=(16, 14))
+        ctk.CTkButton(rodape, text="Salvar", width=90, fg_color=ACENTO,
+                      hover_color=ACENTO_ESCURO, command=salvar).pack(side="right")
+        ctk.CTkButton(rodape, text="Cancelar", width=90, fg_color=BORDA,
+                      hover_color=BORDA_CLARA, command=janela.destroy).pack(side="right", padx=6)
+        ctk.CTkButton(rodape, text="Remover edição", width=120, fg_color=BORDA,
+                      hover_color=BORDA_CLARA, command=remover).pack(side="left")
+        janela.after(200, janela.grab_set)
+        janela.after(200, janela.focus)
 
     # ----- tocar ----------------------------------------------------------
 
@@ -687,6 +829,7 @@ class App:
                 self.status(f"Erro ao tocar {nome}: {erro}")
                 return
         self.tocadores.extend(novos)
+        self._marcar_tocando()
         self.status(f"Tocando: {nome}")
 
     @staticmethod
@@ -719,6 +862,7 @@ class App:
             self.tocadores.remove(tocador)
             if not self.tocadores:
                 self.status("Pronto")
+            self._marcar_tocando()
         tocador.fechar()
 
     def parar(self):
@@ -728,6 +872,7 @@ class App:
         if self.tocadores:
             self.status("Parado.")
         self.tocadores = []
+        self._marcar_tocando()
 
     def parar_som(self, nome):
         restantes = []
@@ -737,6 +882,7 @@ class App:
             else:
                 restantes.append(tocador)
         self.tocadores = restantes
+        self._marcar_tocando()
         self.status(f"Parado: {nome}")
 
     def parar_selecionado(self):
@@ -833,7 +979,7 @@ class App:
             self.status(f"Atalho definido: {combo}")
         else:
             self.status("Cancelado.")
-        self.lbl_parar.config(text=self.config.get("atalho_parar") or "—")
+        self.lbl_parar.configure(text=self.config.get("atalho_parar") or "—")
         self._atualizar_linhas()
         self._registrar_atalhos()
         self._salvar_config()
@@ -842,6 +988,7 @@ class App:
         for nome in self.lista.get_children():
             atalho = self.config["atalhos"].get(nome) or "—"
             self.lista.item(nome, values=(nome, atalho))
+        self._atualizar_painel()
 
     def definir_atalho_som(self):
         nome = self._selecionado()
@@ -863,7 +1010,7 @@ class App:
 
     def limpar_atalho_parar(self):
         self.config["atalho_parar"] = ""
-        self.lbl_parar.config(text="—")
+        self.lbl_parar.configure(text="—")
         self._registrar_atalhos()
         self._salvar_config()
 
@@ -992,23 +1139,31 @@ class App:
         self.root.destroy()
 
 
+if TkinterDnD is not None:
+    class Janela(ctk.CTk, TkinterDnD.DnDWrapper):
+        """Janela do CustomTkinter com suporte a arrastar e soltar."""
+
+        def __init__(self):
+            super().__init__()
+            self.TkdndVersion = TkinterDnD._require(self)
+else:
+    Janela = ctk.CTk
+
+
 def main():
     configurar_log()
+    ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("blue")
+    tema = ctk.ThemeManager.theme
+    for widget, chaves in (("CTkSlider", ("button_color",)), ("CTkSwitch", ("progress_color",))):
+        for chave in chaves:
+            tema[widget][chave] = [ACENTO, ACENTO]
+    for widget in ("CTkSlider", "CTkSwitch"):
+        tema[widget]["button_hover_color"] = [ACENTO_ESCURO, ACENTO_ESCURO]
 
-    # Deixa o texto nítido em telas com escala (125%, 150%...)
-    try:
-        import ctypes
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
-        pass
-
-    root = TkinterDnD.Tk() if TkinterDnD is not None else tk.Tk()
+    root = Janela()
     root.report_callback_exception = (
         lambda tipo, valor, tb: log.error("Erro na interface", exc_info=(tipo, valor, tb)))
-    try:
-        ttk.Style().theme_use("vista")
-    except tk.TclError:
-        pass
     app = App(root)
     if "--minimizado" in sys.argv:
         root.after(100, app.esconder)
