@@ -30,6 +30,8 @@ PASTA = Path(__file__).resolve().parent
 PASTA_SONS = PASTA / "sons"
 ARQ_CONFIG = PASTA / "config.json"
 EXTENSOES = {".wav", ".mp3", ".ogg", ".flac"}
+LIMITE_CACHE = 200 * 1024 * 1024   # bytes de áudio decodificado mantidos na memória
+TEMPO_CAPTURA = 15000              # ms até desistir de capturar um atalho
 
 
 # ---------------------------------------------------------------------------
@@ -61,11 +63,21 @@ def carregar_audio(caminho, taxa_destino, canais_destino):
     return np.ascontiguousarray(dados, dtype=np.float32)
 
 
+def limitar(dados, limite=0.8):
+    """Limitador suave: só mexe no que passa de `limite`, sem cortar a onda."""
+    amplitude = np.abs(dados)
+    if amplitude.max(initial=0.0) <= 1.0:
+        return dados
+    folga = 1.0 - limite
+    suave = limite + folga * np.tanh((amplitude - limite) / folga)
+    return np.where(amplitude <= limite, dados, np.sign(dados) * suave).astype(np.float32)
+
+
 class Tocador:
     """Toca um áudio em um dispositivo de saída específico."""
 
     def __init__(self, dados, dispositivo, taxa, volume, ao_terminar):
-        self.dados = np.clip(dados * volume, -1.0, 1.0)
+        self.dados = np.ascontiguousarray(limitar(dados * volume), dtype=np.float32)
         self.pos = 0
         self.stream = sd.OutputStream(
             device=dispositivo,
@@ -109,9 +121,17 @@ class App:
         self.root = root
         self.fila = queue.Queue()      # tarefas vindas de outras threads
         self.tocadores = []
-        self.cache = {}
+        self.cache = {}                # (arquivo, mtime, taxa, canais) -> áudio
+        self._cache_bytes = 0
+        self._trava_cache = threading.Lock()
+        self._geracao = 0              # muda ao parar: cancela carregamentos pendentes
+        self._geracao_lista = 0        # muda ao recarregar a lista: cancela pré-carga
+        self._salvar_agendado = None
         self.sons = []
         self.capturando = False
+        self._captura_teclas = []
+        self._ao_capturar = None
+        self._token_captura = 0
         self._combos = []              # atalhos ativos: (teclas, ação)
         self._pressionadas = set()     # teclas apertadas neste momento
         self._gancho = None
@@ -164,6 +184,16 @@ class App:
         ttk.Label(quadro, text="Vol.").grid(row=1, column=2, pady=(6, 0))
         ttk.Scale(quadro, from_=0, to=150, variable=self.var_vol_fone,
                   length=110).grid(row=1, column=3, pady=(6, 0))
+
+        self.var_sobrepor = tk.BooleanVar(value=self.config.get("sobrepor", False))
+        ttk.Checkbutton(quadro, text="Permitir sons sobrepostos",
+                        variable=self.var_sobrepor).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        # Salva a configuração sempre que algo mudar (com um pequeno atraso)
+        for var in (self.var_mic, self.var_fone, self.var_vol_mic,
+                    self.var_vol_fone, self.var_ouvir, self.var_sobrepor):
+            var.trace_add("write", lambda *args: self._agendar_salvar())
 
         # Lista de sons
         quadro_lista = ttk.Frame(self.root)
@@ -272,6 +302,27 @@ class App:
         self._registrar_atalhos()
         if not self.sons:
             self.status("Nenhum som ainda. Use \"+ Adicionar sons\".")
+        else:
+            self._pre_carregar()
+
+    def _pre_carregar(self):
+        """Decodifica os sons em segundo plano para o primeiro disparo ser instantâneo."""
+        self._geracao_lista += 1
+        geracao = self._geracao_lista
+        specs = self._especificacoes()
+        arquivos = [PASTA_SONS / nome for nome in self.sons]
+
+        def trabalho():
+            for caminho in arquivos:
+                for _, _, taxa, canais in specs:
+                    if geracao != self._geracao_lista or self._cache_bytes > LIMITE_CACHE // 2:
+                        return
+                    try:
+                        self._audio(caminho, taxa, canais)
+                    except Exception:
+                        pass
+
+        threading.Thread(target=trabalho, daemon=True).start()
 
     def _selecionado(self):
         selecao = self.lista.selection()
@@ -306,13 +357,8 @@ class App:
         if nome:
             self.tocar(nome)
 
-    def tocar(self, nome):
-        self.parar()  # um som por vez, como no Soundpad
-        caminho = PASTA_SONS / nome
-        if not caminho.exists():
-            self.status(f"Arquivo não encontrado: {nome}")
-            return
-
+    def _especificacoes(self):
+        """Saídas escolhidas: lista de (dispositivo, volume, taxa, canais)."""
         saidas = []
         mic = self._indice(self.var_mic.get())
         if mic is not None:
@@ -321,30 +367,80 @@ class App:
             fone = self._indice(self.var_fone.get())
             if fone is not None and fone != mic:
                 saidas.append((fone, self.var_vol_fone.get() / 100))
-        if not saidas:
+        specs = []
+        for indice, volume in saidas:
+            info = sd.query_devices(indice)
+            specs.append((indice, volume, int(info["default_samplerate"]),
+                          min(2, info["max_output_channels"])))
+        return specs
+
+    def tocar(self, nome):
+        if not self.var_sobrepor.get():
+            self.parar()  # um som por vez, como no Soundpad
+        caminho = PASTA_SONS / nome
+        if not caminho.exists():
+            self.status(f"Arquivo não encontrado: {nome}")
+            return
+
+        specs = self._especificacoes()
+        if not specs:
             self.status("Escolha pelo menos uma saída de áudio.")
             return
 
-        for indice, volume in saidas:
-            info = sd.query_devices(indice)
-            taxa = int(info["default_samplerate"])
-            canais = min(2, info["max_output_channels"])
+        geracao = self._geracao
+        if all(self._chave(caminho, t, c) in self.cache for _, _, t, c in specs):
+            self._iniciar(nome, caminho, specs, geracao)
+        else:
+            # Decodificar um arquivo grande demora: faz isso fora da interface.
+            self.status(f"Carregando: {nome}...")
+            threading.Thread(target=self._carregar_e_tocar,
+                             args=(nome, caminho, specs, geracao), daemon=True).start()
+
+    def _carregar_e_tocar(self, nome, caminho, specs, geracao):
+        try:
+            for _, _, taxa, canais in specs:
+                self._audio(caminho, taxa, canais)
+        except Exception as erro:
+            self.na_interface(self.status, f"Erro ao carregar {nome}: {erro}")
+            return
+        self.na_interface(self._iniciar, nome, caminho, specs, geracao)
+
+    def _iniciar(self, nome, caminho, specs, geracao):
+        if geracao != self._geracao:
+            return  # alguém mandou parar (ou tocar outro som) enquanto carregava
+        novos = []
+        for indice, volume, taxa, canais in specs:
             try:
                 dados = self._audio(caminho, taxa, canais)
-                self.tocadores.append(
-                    Tocador(dados, indice, taxa, volume, self._ao_terminar))
+                novos.append(Tocador(dados, indice, taxa, volume, self._ao_terminar))
             except Exception as erro:
+                for tocador in novos:
+                    tocador.parar()
                 self.status(f"Erro ao tocar {nome}: {erro}")
                 return
+        self.tocadores.extend(novos)
         self.status(f"Tocando: {nome}")
 
+    @staticmethod
+    def _chave(caminho, taxa, canais):
+        return (str(caminho), caminho.stat().st_mtime, taxa, canais)
+
     def _audio(self, caminho, taxa, canais):
-        chave = (str(caminho), caminho.stat().st_mtime, taxa, canais)
-        if chave not in self.cache:
-            if len(self.cache) > 60:
-                self.cache.clear()
-            self.cache[chave] = carregar_audio(caminho, taxa, canais)
-        return self.cache[chave]
+        chave = self._chave(caminho, taxa, canais)
+        with self._trava_cache:
+            dados = self.cache.get(chave)
+        if dados is not None:
+            return dados
+        dados = carregar_audio(caminho, taxa, canais)  # lento: fora da trava
+        with self._trava_cache:
+            if chave not in self.cache:
+                # descarta os mais antigos até caber
+                while self.cache and self._cache_bytes + dados.nbytes > LIMITE_CACHE:
+                    antigo = self.cache.pop(next(iter(self.cache)))
+                    self._cache_bytes -= antigo.nbytes
+                self.cache[chave] = dados
+                self._cache_bytes += dados.nbytes
+        return dados
 
     def _ao_terminar(self, tocador):
         # Chamado pela thread de áudio: repassa para a thread da interface.
@@ -358,6 +454,7 @@ class App:
         tocador.fechar()
 
     def parar(self):
+        self._geracao += 1  # cancela sons que ainda estão sendo carregados
         for tocador in self.tocadores:
             tocador.parar()
         if self.tocadores:
@@ -403,11 +500,19 @@ class App:
         codigo = evento.scan_code
         if evento.event_type == keyboard.KEY_UP:
             self._pressionadas.discard(codigo)
+            if self.capturando and self._captura_teclas and not self._pressionadas:
+                # Soltou tudo: a combinação está completa.
+                teclas, self._captura_teclas = self._captura_teclas, []
+                self.capturando = False
+                combo = keyboard.get_hotkey_name(teclas)
+                self.na_interface(self._fim_captura, combo, self._ao_capturar)
             return
         if codigo in self._pressionadas:
             return  # tecla sendo segurada (repetição automática do Windows)
         self._pressionadas.add(codigo)
         if self.capturando:
+            if evento.name and evento.name not in self._captura_teclas:
+                self._captura_teclas.append(evento.name)
             return
         for teclas, acao in self._combos:
             # Dispara quando esta tecla completa o atalho, mesmo com outras
@@ -418,17 +523,19 @@ class App:
     def _capturar_atalho(self, ao_capturar):
         if self.capturando:
             return
-        self.capturando = True  # enquanto captura, os atalhos ficam pausados
+        # Enquanto captura, os atalhos ficam pausados; _ao_tecla junta as teclas
+        # e chama _fim_captura quando todas forem soltas.
+        self._captura_teclas = []
+        self._ao_capturar = ao_capturar
+        self._token_captura += 1
+        self.capturando = True
         self.status("Pressione a combinação de teclas... (Esc cancela)")
+        self.root.after(TEMPO_CAPTURA, self._tempo_captura, self._token_captura)
 
-        def trabalho():
-            try:
-                combo = keyboard.read_hotkey(suppress=False)
-            except Exception:
-                combo = None
-            self.na_interface(self._fim_captura, combo, ao_capturar)
-
-        threading.Thread(target=trabalho, daemon=True).start()
+    def _tempo_captura(self, token):
+        if self.capturando and token == self._token_captura:
+            self._captura_teclas = []
+            self._fim_captura(None, self._ao_capturar)
 
     def _fim_captura(self, combo, ao_capturar):
         self.capturando = False
@@ -508,8 +615,15 @@ class App:
         config.setdefault("atalho_parar", "")
         return config
 
+    def _agendar_salvar(self):
+        if self._salvar_agendado:
+            self.root.after_cancel(self._salvar_agendado)
+        self._salvar_agendado = self.root.after(500, self._salvar_config)
+
     def _salvar_config(self):
+        self._salvar_agendado = None
         self.config.update({
+            "sobrepor": self.var_sobrepor.get(),
             "saida_mic": self.var_mic.get(),
             "saida_fone": self.var_fone.get(),
             "volume_mic": round(self.var_vol_mic.get()),

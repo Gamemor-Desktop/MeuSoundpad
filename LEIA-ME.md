@@ -28,6 +28,7 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 - **Tocar:** dê dois cliques no som ou selecione e aperte Enter.
 - **Atalho:** selecione um som, clique em **Definir atalho** e aperte a combinação (ex.: `ctrl+1`). Use Esc para cancelar.
 - **Parar tudo:** defina um atalho na parte de baixo da janela.
+- **Sons sobrepostos:** por padrão só um som toca por vez. Marque **Permitir sons sobrepostos** para tocar vários ao mesmo tempo.
 - **Microfone virtual** deve estar em **CABLE Input**. **Ouvir nos fones** toca o som também para você.
 - As configurações ficam salvas em `config.json`.
 
