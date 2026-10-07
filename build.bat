@@ -8,7 +8,7 @@ if errorlevel 1 (
     exit /b 1
 )
 echo Gerando o executavel (leva alguns minutos)...
-python -m PyInstaller --noconfirm --onefile --noconsole --name MeuSoundpad --collect-all tkinterdnd2 --collect-all customtkinter soundpad.py
+python -m PyInstaller --noconfirm --onefile --noconsole --name MeuSoundpad --collect-all tkinterdnd2 --collect-all customtkinter --add-data "exemplos;exemplos" soundpad.py
 if errorlevel 1 (
     echo Falha ao gerar o executavel.
     pause

@@ -14,5 +14,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m py_compile soundpad.py audio.py
+      - run: python -m py_compile soundpad.py audio.py tema.py tutorial.py tutorial_passos.py tools/gerar_som_exemplo.py
       - run: python -m pytest -q

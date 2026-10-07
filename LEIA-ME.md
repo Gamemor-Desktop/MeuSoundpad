@@ -2,7 +2,7 @@
 
 Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona só no Windows.
 
-> **Sons:** este repositório não inclui nenhum áudio. Coloque os seus próprios arquivos na pasta `sons` (veja "Uso"). Use apenas sons que você tem direito de usar.
+> **Sons:** este repositório não inclui áudios de terceiros, só um "ding" de exemplo criado para o tutorial. Coloque os seus próprios arquivos na pasta `sons` (veja "Uso"). Use apenas sons que você tem direito de usar.
 
 ## Instalação (uma vez só)
 
@@ -21,6 +21,10 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 2. Na aba **Gravação**, abra as **Propriedades** do seu microfone de verdade.
 3. Na aba **Escutar**, marque **"Escutar este dispositivo"** e, em "Reproduzir por este dispositivo", escolha **CABLE Input**.
 4. Clique em OK.
+
+## Tutorial
+
+Na primeira vez que você abre o app, um tour guiado de 6 passos mostra como instalar o VB-Cable (com link para baixar e botão para verificar), adicionar o som de exemplo, tocar, definir um atalho e configurar o Discord ou o jogo. Para refazer o tour, clique em **? Tutorial** no topo da janela.
 
 ## Uso
 
@@ -49,6 +53,8 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 ## Para quem quer mexer no código
 
 - `soundpad.py` é a interface e `audio.py` tem as funções de áudio.
+- `tutorial.py` é o cartão do tour e `tutorial_passos.py` tem os passos e a lógica (testável). `tema.py` guarda cores e fontes.
+- O som de exemplo (`exemplos/exemplo-ding.wav`) é sintetizado por `tools/gerar_som_exemplo.py`.
 - Testes: `pip install -r requirements-dev.txt` e depois `python -m pytest`.
 - Erros ficam registrados em `soundpad.log`, ao lado do programa.
 

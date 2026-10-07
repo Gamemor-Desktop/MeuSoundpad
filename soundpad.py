@@ -28,6 +28,10 @@ import soundfile as sf
 import customtkinter as ctk
 
 from audio import carregar_audio, cortar, limitar
+from tutorial import Tutorial
+from tutorial_passos import cabo_instalado, copiar_exemplo
+from tema import (ACENTO, ACENTO_ESCURO, BORDA, BORDA_CLARA, FAMILIA, FUNDO, PAINEL,
+                  PERIGO, PERIGO_ESCURO, TEXTO, TEXTO_SUAVE, fonte)
 
 # Opcionais: o app funciona sem eles, só perde o recurso correspondente.
 try:
@@ -65,24 +69,7 @@ ALTERNAR = "Alternar tocar/parar"
 CHAVE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
 NOME_RUN = "MeuSoundpad"
 
-# Tema escuro
-FUNDO = "#16171a"
-PAINEL = "#202226"
-BORDA = "#2f3238"
-BORDA_CLARA = "#3d4148"
-TEXTO_SUAVE = "#9aa0a6"
-TEXTO = "#e8eaed"
-ACENTO = "#3b82f6"
-ACENTO_ESCURO = "#2456a8"
-PERIGO = "#dc2626"
-PERIGO_ESCURO = "#b91c1c"
-FAMILIA = "Segoe UI"
-
 log = logging.getLogger("soundpad")
-
-
-def fonte(tamanho, peso="normal"):
-    return ctk.CTkFont(family=FAMILIA, size=tamanho, weight=peso)
 
 
 def configurar_log():
@@ -220,6 +207,8 @@ class App:
         self._combos = []              # atalhos ativos: (teclas, ação)
         self._pressionadas = set()     # teclas apertadas neste momento
         self._gancho = None
+        self.tutorial = None
+        self.alvos_tutorial = {}       # partes da janela que o tour pode destacar
 
         PASTA_SONS.mkdir(exist_ok=True)
         self.config = self._ler_config()
@@ -232,10 +221,13 @@ class App:
         self._montar_interface()
         self._carregar_lista()
 
-        if not any("cable input" in nome.lower() for _, nome in self.dispositivos):
+        if not cabo_instalado(nome for _, nome in self.dispositivos):
             self.status("VB-Cable não encontrado. Veja o LEIA-ME para instalar.")
         elif self._avisos:
             self.status(self._avisos[0])
+
+        if not self.config.get("tutorial_visto") and "--minimizado" not in sys.argv:
+            root.after(500, self.abrir_tutorial)
 
         root.protocol("WM_DELETE_WINDOW", self.fechar)
         self._processar_fila()
@@ -299,12 +291,18 @@ class App:
         self.entrada_busca.pack(side="left", fill="x", expand=True)
         self.entrada_busca.bind(
             "<KeyRelease>", lambda e: self.var_busca.set(self.entrada_busca.get()))
-        ctk.CTkButton(topo, text="⚙  Configurações", width=140, height=38, font=fonte(13),
+        ctk.CTkButton(topo, text="?  Tutorial", width=100, height=38, font=fonte(13),
                       fg_color=PAINEL, hover_color=BORDA, border_width=1, border_color=BORDA,
-                      command=self.abrir_configuracoes).pack(side="right", padx=(8, 0))
-        ctk.CTkButton(topo, text="+  Adicionar sons", width=150, height=38,
-                      font=fonte(13, "bold"), fg_color=ACENTO, hover_color=ACENTO_ESCURO,
-                      command=self.adicionar_sons).pack(side="right", padx=(8, 0))
+                      command=self.abrir_tutorial).pack(side="right", padx=(8, 0))
+        btn_config = ctk.CTkButton(
+            topo, text="⚙  Configurações", width=140, height=38, font=fonte(13),
+            fg_color=PAINEL, hover_color=BORDA, border_width=1, border_color=BORDA,
+            command=self.abrir_configuracoes)
+        btn_config.pack(side="right", padx=(8, 0))
+        btn_adicionar = ctk.CTkButton(
+            topo, text="+  Adicionar sons", width=150, height=38, font=fonte(13, "bold"),
+            fg_color=ACENTO, hover_color=ACENTO_ESCURO, command=self.adicionar_sons)
+        btn_adicionar.pack(side="right", padx=(8, 0))
 
         corpo = ctk.CTkFrame(self.root, fg_color="transparent")
         corpo.pack(fill="both", expand=True, padx=16, pady=(0, 12))
@@ -377,6 +375,7 @@ class App:
                      anchor="w").pack(fill="x", padx=16, pady=(12, 2))
         linha = ctk.CTkFrame(painel, fg_color="transparent")
         linha.pack(fill="x", padx=16)
+        linha_atalho = linha
         linha.columnconfigure((0, 1), weight=1)
         b = ctk.CTkButton(linha, text="Definir", height=32, font=fonte(12), fg_color=BORDA,
                           hover_color=BORDA_CLARA, command=self.definir_atalho_som)
@@ -402,6 +401,8 @@ class App:
         b.pack(fill="x", padx=16, pady=(16, 0))
         self._controles_som.append(b)
 
+        self.alvos_tutorial = {"adicionar": btn_adicionar, "config": btn_config,
+                               "painel": painel, "atalho": linha_atalho}
         self._ao_selecionar()
 
     def _menu_contexto(self, evento):
@@ -745,6 +746,7 @@ class App:
         self._carregar_lista()
         if copiados:
             self.status(f"{copiados} som(ns) adicionado(s).")
+            self._notificar_tutorial("som_adicionado")
 
     def abrir_pasta(self):
         os.startfile(PASTA_SONS)
@@ -917,6 +919,7 @@ class App:
         self.tocadores.extend(novos)
         self._marcar_tocando()
         self.status(f"Tocando: {nome}")
+        self._notificar_tutorial("som_tocado")
 
     @staticmethod
     def _chave(caminho, taxa, canais):
@@ -1063,6 +1066,7 @@ class App:
                 self.config["atalho_parar"] = ""
             ao_capturar(combo)
             self.status(f"Atalho definido: {combo}")
+            self._notificar_tutorial("atalho_definido")
         else:
             self.status("Cancelado.")
         self.lbl_parar.configure(text=self.config.get("atalho_parar") or "—")
@@ -1162,6 +1166,53 @@ class App:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
+
+    # ----- tutorial -------------------------------------------------------
+
+    def abrir_tutorial(self):
+        if self.tutorial is not None:
+            self.tutorial.cartao.lift()
+            return
+        self.tutorial = Tutorial(self)
+
+    def ao_fechar_tutorial(self):
+        self.tutorial = None
+        self.config["tutorial_visto"] = True
+        self._salvar_config()
+
+    def _notificar_tutorial(self, evento):
+        if self.tutorial is not None:
+            self.tutorial.notificar(evento)
+
+    def adicionar_exemplo(self):
+        nome = copiar_exemplo(PASTA_SONS)
+        if nome is None:
+            self.status("Não encontrei o som de exemplo.")
+            return
+        self._carregar_lista()
+        self._selecionar_som(nome)
+        self.status(f"Som de exemplo adicionado: {nome}")
+        self._notificar_tutorial("som_adicionado")
+
+    def _selecionar_som(self, nome):
+        if self.lista.exists(nome):
+            self.lista.selection_set(nome)
+            self.lista.see(nome)
+
+    def recarregar_dispositivos(self):
+        """Procura os dispositivos de novo (por exemplo, depois de instalar o VB-Cable)."""
+        self.parar()
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception:
+            log.exception("Falha ao reiniciar o áudio")
+        self.dispositivos = self._listar_dispositivos()
+        if cabo_instalado(nome for _, nome in self.dispositivos):
+            self.var_mic.set(self._escolher_inicial(self.config.get("saida_mic"), "cable input"))
+            self.status("VB-Cable encontrado.")
+        else:
+            self.status("VB-Cable não encontrado. Se acabou de instalar, reinicie o PC.")
 
     # ----- configuração ---------------------------------------------------
 
