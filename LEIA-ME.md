@@ -2,6 +2,8 @@
 
 Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona só no Windows.
 
+> **Sons:** este repositório não inclui nenhum áudio. Coloque os seus próprios arquivos na pasta `sons` (veja "Uso"). Use apenas sons que você tem direito de usar.
+
 ## Instalação (uma vez só)
 
 1. **Instale o Python 3** pelo site python.org. Na primeira tela do instalador, marque **"Add python.exe to PATH"**.
@@ -35,3 +37,7 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 - **Ninguém ouve os sons:** confira se o app está tocando em **CABLE Input** e se o Discord ou o jogo está usando **CABLE Output** como microfone.
 - **"VB-Cable não encontrado":** instale o VB-Cable e reinicie o PC.
 - **O som sai baixo ou estourado:** ajuste os controles de volume ao lado de cada saída.
+
+## Licença
+
+MIT. Veja o arquivo `LICENSE`.
