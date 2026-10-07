@@ -6,3 +6,10 @@ __pycache__/
 config.json
 sons/*
 !sons/.gitkeep
+
+# Logs e empacotamento
+*.log
+build/
+dist/
+*.spec
+.pytest_cache/

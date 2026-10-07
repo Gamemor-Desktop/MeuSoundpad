@@ -29,8 +29,27 @@ Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona s
 - **Atalho:** selecione um som, clique em **Definir atalho** e aperte a combinação (ex.: `ctrl+1`). Use Esc para cancelar.
 - **Parar tudo:** defina um atalho na parte de baixo da janela.
 - **Sons sobrepostos:** por padrão só um som toca por vez. Marque **Permitir sons sobrepostos** para tocar vários ao mesmo tempo.
+- **Parar um som só:** selecione-o e clique em **Parar selecionado**.
+- **Ao repetir o atalho:** escolha se apertar de novo **reinicia** o som ou **alterna** entre tocar e parar.
+- **Buscar:** digite no campo **Buscar** para filtrar a lista. Você também pode arrastar arquivos de áudio para a lista.
+- **Volume por som:** selecione um som e ajuste **Volume do som selecionado** (0 a 200%).
+- **Editar som:** em **Editar som...** você corta o começo e o fim do arquivo e pode ativar o **loop**, que toca até você parar.
+- **Bandeja:** com **Ao fechar, ir para a bandeja** marcado, o X da janela só esconde o app. Os atalhos continuam valendo. Use o ícone perto do relógio para abrir ou sair.
+- **Iniciar com o Windows:** o app abre escondido na bandeja quando você liga o PC.
 - **Microfone virtual** deve estar em **CABLE Input**. **Ouvir nos fones** toca o som também para você.
 - As configurações ficam salvas em `config.json`.
+
+## Versão em .exe (sem instalar Python)
+
+- **Baixar:** pegue o `MeuSoundpad.exe` na página de Releases do repositório e coloque numa pasta sua. A pasta `sons` e o `config.json` ficam ao lado dele.
+- **Gerar você mesmo:** dê dois cliques em `build.bat`. O arquivo sai em `dist\MeuSoundpad.exe`.
+- **Antivírus:** alguns avisam sobre o `.exe` porque o app lê o teclado para os atalhos globais. É um falso positivo comum. Se preferir, rode pelo `abrir.bat`.
+
+## Para quem quer mexer no código
+
+- `soundpad.py` é a interface e `audio.py` tem as funções de áudio.
+- Testes: `pip install -r requirements-dev.txt` e depois `python -m pytest`.
+- Erros ficam registrados em `soundpad.log`, ao lado do programa.
 
 ## Problemas comuns
 
