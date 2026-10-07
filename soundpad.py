@@ -13,6 +13,7 @@ import logging
 import os
 import queue
 import shutil
+import subprocess
 import sys
 import threading
 import tkinter as tk
@@ -339,6 +340,7 @@ class App:
         self.lista.bind("<Double-1>", lambda e: self.tocar_selecionado())
         self.lista.bind("<Return>", lambda e: self.tocar_selecionado())
         self.lista.bind("<<TreeviewSelect>>", lambda e: self._ao_selecionar())
+        self.lista.bind("<Button-3>", self._menu_contexto)
         self.root.bind("<Control-f>", lambda e: self.entrada_busca.focus_set())
         if TkinterDnD is not None:
             self.lista.drop_target_register(DND_FILES)
@@ -401,6 +403,90 @@ class App:
         self._controles_som.append(b)
 
         self._ao_selecionar()
+
+    def _menu_contexto(self, evento):
+        """Menu do botão direito sobre um som da lista."""
+        nome = self.lista.identify_row(evento.y)
+        if not nome:
+            return
+        self.lista.selection_set(nome)
+        self.lista.focus(nome)
+        menu = tk.Menu(self.root, tearoff=0, bg=PAINEL, fg=TEXTO, activebackground=ACENTO,
+                       activeforeground="white", bd=0, font=(FAMILIA, 10))
+        menu.add_command(label="▶  Tocar", command=lambda: self.tocar(nome))
+        menu.add_command(label="■  Parar", command=lambda: self.parar_som(nome))
+        menu.add_separator()
+        menu.add_command(label="Gravar atalho...", command=self.definir_atalho_som)
+        tem_atalho = bool(self.config["atalhos"].get(nome))
+        menu.add_command(label="Limpar atalho", command=self.limpar_atalho_som,
+                         state="normal" if tem_atalho else "disabled")
+        menu.add_separator()
+        menu.add_command(label="✂  Editar som...", command=self.editar_som)
+        menu.add_command(label="Renomear...", command=lambda: self._renomear_som(nome))
+        menu.add_command(label="Mostrar na pasta", command=lambda: self._mostrar_na_pasta(nome))
+        menu.add_command(label="Excluir som...", command=lambda: self._excluir_som(nome))
+        try:
+            menu.tk_popup(evento.x_root, evento.y_root)
+        finally:
+            menu.grab_release()
+
+    def _mostrar_na_pasta(self, nome):
+        try:
+            subprocess.Popen(["explorer", "/select,", str(PASTA_SONS / nome)])
+        except OSError:
+            self.abrir_pasta()
+
+    def _renomear_som(self, nome):
+        origem = PASTA_SONS / nome
+        dialogo = ctk.CTkInputDialog(title="Renomear som",
+                                     text=f"Novo nome para \"{origem.stem}\":")
+        novo = dialogo.get_input()
+        if novo is None:
+            return
+        novo = novo.strip()
+        if not novo or novo == origem.stem:
+            return
+        if any(c in novo for c in '\\/:*?"<>|'):
+            self.status('O nome não pode ter os caracteres \\ / : * ? " < > |')
+            return
+        destino = PASTA_SONS / (novo + origem.suffix)
+        novo_nome = destino.name
+        if destino.exists() and novo_nome.lower() != nome.lower():
+            self.status(f"Já existe um som chamado {novo_nome}.")
+            return
+        self.parar_som(nome)
+        try:
+            origem.rename(destino)
+        except OSError as erro:
+            log.exception("Falha ao renomear %s", nome)
+            self.status(f"Não consegui renomear: {erro}")
+            return
+        for chave in ("atalhos", "volumes", "cortes"):
+            if nome in self.config[chave]:
+                self.config[chave][novo_nome] = self.config[chave].pop(nome)
+        self._salvar_config()
+        self._carregar_lista()
+        if self.lista.exists(novo_nome):
+            self.lista.selection_set(novo_nome)
+            self.lista.see(novo_nome)
+        self.status(f"Renomeado para {novo_nome}.")
+
+    def _excluir_som(self, nome):
+        if not messagebox.askyesno("Excluir som", f"Excluir \"{nome}\" da pasta de sons?",
+                                   parent=self.root):
+            return
+        self.parar_som(nome)
+        try:
+            (PASTA_SONS / nome).unlink()
+        except OSError as erro:
+            log.exception("Falha ao excluir %s", nome)
+            self.status(f"Não consegui excluir {nome}: {erro}")
+            return
+        for chave in ("atalhos", "volumes", "cortes"):
+            self.config[chave].pop(nome, None)
+        self._salvar_config()
+        self._carregar_lista()
+        self.status(f"Excluído: {nome}")
 
     def abrir_configuracoes(self):
         if self._janela_config is not None and self._janela_config.winfo_exists():
