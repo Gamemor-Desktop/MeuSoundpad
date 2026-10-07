@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Pessoal / com direitos autorais
+config.json
+sons/*
+!sons/.gitkeep
