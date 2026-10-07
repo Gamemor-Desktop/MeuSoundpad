@@ -1,6 +1,11 @@
 # Meu Soundpad
 
+[![CI](https://github.com/Gamemor-Desktop/MeuSoundpad/actions/workflows/ci.yml/badge.svg)](https://github.com/Gamemor-Desktop/MeuSoundpad/actions/workflows/ci.yml)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue.svg)](LICENSE)
+
 Toca sons no seu microfone (Discord, jogos etc.) com atalhos globais. Funciona só no Windows.
+
+**[⬇ Baixar o MeuSoundpad.exe](https://github.com/Gamemor-Desktop/MeuSoundpad/releases/latest)** (não precisa instalar o Python, mas o VB-Cable continua necessário).
 
 > **Sons:** este repositório não inclui áudios de terceiros, só um "ding" de exemplo criado para o tutorial. Coloque os seus próprios arquivos na pasta `sons` (veja "Uso"). Use apenas sons que você tem direito de usar.
 
@@ -65,6 +70,14 @@ Na primeira vez que você abre o app, um tour guiado de 6 passos mostra como ins
 - **Ninguém ouve os sons:** confira se o app está tocando em **CABLE Input** e se o Discord ou o jogo está usando **CABLE Output** como microfone.
 - **"VB-Cable não encontrado":** instale o VB-Cable e reinicie o PC.
 - **O som sai baixo ou estourado:** ajuste o volume de cada saída em **Configurações**.
+
+## Privacidade
+
+O app roda todo no seu computador e não envia nada para a internet. Ele lê o teclado só para detectar os atalhos que você definiu. A única conexão é o link do tutorial, que abre o site do VB-Cable no navegador.
+
+## Contribuindo
+
+Veja o [CONTRIBUTING.md](CONTRIBUTING.md). Bugs e sugestões vão em [Issues](https://github.com/Gamemor-Desktop/MeuSoundpad/issues).
 
 ## Licença
 

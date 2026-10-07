@@ -5,7 +5,7 @@ Toca sons no seu microfone (através do VB-Audio Virtual Cable) e, se você
 quiser, também nos seus fones. Cada som pode ter um atalho global, que
 funciona mesmo com o jogo ou o Discord em foco.
 
-Como usar: veja o arquivo LEIA-ME.md.
+Como usar: veja o arquivo README.md.
 """
 
 import json
@@ -222,7 +222,7 @@ class App:
         self._carregar_lista()
 
         if not cabo_instalado(nome for _, nome in self.dispositivos):
-            self.status("VB-Cable não encontrado. Veja o LEIA-ME para instalar.")
+            self.status("VB-Cable não encontrado. Veja o README para instalar.")
         elif self._avisos:
             self.status(self._avisos[0])
 
